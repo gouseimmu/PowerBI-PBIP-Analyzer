@@ -72,3 +72,39 @@ class OpenAIProvider(DAXAIProvider):
             logger.warning(f"Failed to parse OpenAI JSON response: {e}")
             return None
 
+    def chat_completion(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.2,
+        max_tokens: int = 1000,
+    ) -> Optional[str]:
+        """Send chat messages history to OpenAI endpoint and return text response."""
+        if not self.is_available():
+            return None
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+
+        try:
+            response = requests.post(self.url, headers=headers, json=payload, timeout=self.timeout)
+            response.raise_for_status()
+
+            res_json = response.json()
+            choices = res_json.get("choices", [])
+            if not choices:
+                return None
+
+            return choices[0].get("message", {}).get("content", "")
+        except Exception as e:
+            logger.warning(f"OpenAI chat completion failed: {e}")
+            return None
+

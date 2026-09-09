@@ -4,6 +4,9 @@ from __future__ import annotations
 import os
 import tempfile
 from typing import Any, Dict, Tuple
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from extractors.pbip_reader import PBIPReader
 from extractors.model_extractor import ModelExtractor
@@ -14,13 +17,17 @@ from analyzers.date_table_analyzer import DateTableAnalyzer
 from analyzers.dax_dependency_analyzer import DAXDependencyAnalyzer, ModelCatalog
 from analyzers.visual_usage_analyzer import VisualUsageAnalyzer
 from analyzers.object_usage_analyzer import ObjectUsageAnalyzer
+from analyzers.model_health_analyzer import ModelHealthAnalyzer
 from ai.dax_optimizer import DAXOptimizer
-from ai.provider import get_ai_provider
+from ai.provider import get_ai_provider, NullAIProvider
+from ai.advisors import AIAdvisors
 from output.excel_generator import ExcelGenerator
 
 
-def analyze_pbip_zip(zip_path: str) -> Tuple[Dict[str, Any], str]:
+def analyze_pbip_zip(zip_path: str, enable_ai: bool = True) -> Tuple[Dict[str, Any], str]:
     """Analyze a PBIP ZIP and return normalized metadata plus provider name."""
+    load_dotenv()
+
     with PBIPReader.read_zip(zip_path) as project:
         model_ext = ModelExtractor(project)
         model_info = model_ext.get_model_info()
@@ -68,7 +75,7 @@ def analyze_pbip_zip(zip_path: str) -> Tuple[Dict[str, Any], str]:
         unused_objects = object_usage_analyzer.get_unused_objects()
         phase2_summary = object_usage_analyzer.get_summary_metrics()
 
-        ai_provider = get_ai_provider()
+        ai_provider = get_ai_provider() if enable_ai else NullAIProvider()
         object_usage_map = {item.get("Object Name"): item for item in object_usage}
         for item in object_usage:
             can_id = f"{item.get('Object Type', '').upper()}:{item.get('Table', '')}[{item.get('Object Name', '')}]"
@@ -113,6 +120,15 @@ def analyze_pbip_zip(zip_path: str) -> Tuple[Dict[str, Any], str]:
         metadata["report_format"] = project.report_format.value
         metadata["ai_provider"] = ai_provider.provider_name
         metadata["ai_available"] = ai_provider.is_available()
+
+        # Add Model Health Score
+        health = ModelHealthAnalyzer.calculate_health_score(metadata)
+        metadata["model_health"] = health
+
+        # Add Advisory & AI Documentation
+        metadata["model_advisories"] = AIAdvisors.generate_model_advice(metadata, ai_provider)
+        metadata["report_advisories"] = AIAdvisors.generate_report_advice(metadata, ai_provider)
+        metadata["executive_documentation"] = AIAdvisors.generate_documentation(metadata, ai_provider)
 
         return metadata, ai_provider.provider_name
 

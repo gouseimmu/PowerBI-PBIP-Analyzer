@@ -213,9 +213,9 @@ def test_transitive_usage_classification(workforce_pbip):
         assert usage_map["Billable Hours"]["Used"] == "Yes"
         assert usage_map["Billable Hours"]["Usage Type"] == "Indirect"
 
-        # 3. Total Hours is DIRECT (Visual 3 & Visual 5) and used in multiple locations
+        # 3. Total Hours is DIRECT + INDIRECT (used in visual & in DAX)
         assert usage_map["Total Hours"]["Used"] == "Yes"
-        assert usage_map["Total Hours"]["Usage Type"] == "Direct"
+        assert usage_map["Total Hours"]["Usage Type"] == "Direct + Indirect"
         assert usage_map["Total Hours"]["Usage Location Count"] >= 2
 
         # 4. Unused Training Count is UNUSED
@@ -343,30 +343,25 @@ def test_excel_preserves_multiline_dax(workforce_pbip, tmp_path):
             "phase3_summary": optimizer.get_phase3_summary_metrics(),
         }
 
+        metadata["project_name"] = project.project_name
+        metadata["model_format"] = project.model_format.value
+        metadata["report_format"] = project.report_format.value
+        metadata["model_health"] = {"score": 95, "grade": "A", "status_text": "Good", "deductions": []}
+
         ExcelGenerator.generate_report(metadata, output_file)
 
         wb = openpyxl.load_workbook(output_file)
-        assert len(wb.sheetnames) == 9
+        assert len(wb.sheetnames) == 6
 
-        # Check Measures & Calculated Columns sheet for multiline DAX
-        meas_ws = wb["Measures & Calculated Columns"]
+        # Check DAX Analysis sheet for multiline DAX
+        dax_ws = wb["DAX Analysis"]
         b_pct_dax = None
-        for row in meas_ws.iter_rows(min_row=5, values_only=True):
+        for row in dax_ws.iter_rows(min_row=5, values_only=True):
             if row[1] == "Billable %":
-                b_pct_dax = row[3]  # DAX Expression column (index 3, 0-indexed)
+                b_pct_dax = row[3]  # Original DAX column
                 break
 
         assert b_pct_dax is not None
         assert "DIVIDE(" in b_pct_dax
         assert "[Billable Hours]" in b_pct_dax
         assert "\n" in b_pct_dax
-
-        # Check Pages & Visuals column headers order
-        vis_ws = wb["Pages & Visuals"]
-        headers = [cell.value for cell in vis_ws[4]]
-        assert headers[0] == "Page Name"
-        assert headers[1] == "Visual Name"
-        assert headers[2] == "Visual Type"
-        assert headers[3] == "Visual Title"
-        assert headers[4] == "Visual ID"
-        assert headers[5] == "Page ID"

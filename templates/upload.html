@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head><title>Power BI PBIP Analyzer</title></head>
+<body>
+<h1>Power BI Report Analyzer</h1>
+<h2>Upload PBIP Project ZIP</h2>
+{% if error %}<p style="color:red;">{{ error }}</p>{% endif %}
+<form action="/upload" method="post" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".zip">
+    <input type="submit" value="Upload PBIP Project ZIP">
+</form>
+</body>
+</html>
+

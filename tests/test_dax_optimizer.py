@@ -35,6 +35,11 @@ class MockAIProvider(DAXAIProvider):
             "requires_manual_validation": True,
         }
 
+    def chat_completion(self, messages, temperature=0.2, max_tokens=1000):
+        if self.should_fail:
+            raise RuntimeError("Simulated AI network failure")
+        return "Mock chat completion response"
+
 
 def test_dax_optimizer_static_only():
     tables = [{"Table Name": "Sales"}]

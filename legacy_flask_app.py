@@ -8,6 +8,9 @@ import logging
 from datetime import datetime
 from flask import Flask, request, render_template, send_from_directory
 from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from extractors.pbip_reader import PBIPReader, PBIPExtractionError
 from extractors.model_extractor import ModelExtractor
@@ -18,6 +21,7 @@ from analyzers.date_table_analyzer import DateTableAnalyzer
 from analyzers.dax_dependency_analyzer import DAXDependencyAnalyzer, ModelCatalog
 from analyzers.visual_usage_analyzer import VisualUsageAnalyzer
 from analyzers.object_usage_analyzer import ObjectUsageAnalyzer
+from analyzers.model_health_analyzer import ModelHealthAnalyzer
 from ai.dax_optimizer import DAXOptimizer
 from ai.provider import get_ai_provider
 from output.excel_generator import ExcelGenerator
@@ -32,6 +36,8 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATE_FOLDER = os.path.join(BASE_DIR, "templates")
+app = Flask(__name__, template_folder=TEMPLATE_FOLDER)
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 OUTPUT_FOLDER = os.path.join(BASE_DIR, "outputs")
 
@@ -52,6 +58,7 @@ def index():
 @app.route("/upload", methods=["POST"])
 def upload_file():
     """Handle PBIP ZIP file upload and trigger full Phase 1, 2 & 3 metadata and optimization pipeline."""
+    """Handle PBIP ZIP file upload and trigger full metadata and optimization pipeline."""
     if "file" not in request.files:
         logger.warning("Upload attempt with no file field in request.")
         return render_template("upload.html", error="No file part in request."), 400
@@ -77,6 +84,7 @@ def upload_file():
             logger.info(f"Processing project '{project.project_name}' (Model: {project.model_format.value}, Report: {project.report_format.value})")
 
             # 1. Semantic Model Extraction (Phase 1)
+            # 1. Semantic Model Extraction
             model_ext = ModelExtractor(project)
             model_info = model_ext.get_model_info()
             tables = model_ext.get_tables()
@@ -87,14 +95,17 @@ def upload_file():
             raw_partitions = model_ext.get_raw_partitions_and_expressions()
 
             # 2. Report PBIR Extraction (Phase 1)
+            # 2. Report PBIR Extraction
             report_ext = ReportExtractor(project)
             pages = report_ext.get_pages()
             visuals = report_ext.get_visuals()
 
             # 3. Source Extraction (Phase 1)
+            # 3. Source Extraction
             sources = SourceExtractor.extract_sources(raw_partitions)
 
             # 4. Phase 1 Analyzers
+            # 4. Analyzers
             rel_analyzer = RelationshipAnalyzer(raw_rels)
             relationships = rel_analyzer.get_relationships()
             key_columns = rel_analyzer.get_key_columns()
@@ -105,6 +116,7 @@ def upload_file():
             date_tables = date_analyzer.get_date_tables_list()
 
             # 5. Phase 2: Usage, Lineage & DAX Dependency Analysis
+            # 5. Usage, Lineage & DAX Dependency Analysis
             catalog = ModelCatalog(tables, columns, measures, calc_columns)
             dax_analyzer = DAXDependencyAnalyzer(catalog, measures, calc_columns)
             visual_analyzer = VisualUsageAnalyzer(pages, visuals, catalog)
@@ -128,6 +140,7 @@ def upload_file():
             phase2_summary = object_usage_analyzer.get_summary_metrics()
 
             # 6. Phase 3: DAX Quality Analysis & Optimization
+            # 6. DAX Quality Analysis & Optimization
             ai_provider = get_ai_provider()
             object_usage_map = {item.get("Object Name"): item for item in object_usage}
             for item in object_usage:
@@ -148,7 +161,13 @@ def upload_file():
             phase3_summary = dax_optimizer.get_phase3_summary_metrics()
 
             # 7. Compile Full Normalized Metadata (18 Sheets)
+            # Compile Full Normalized Metadata
             metadata = {
+                "project_name": project.project_name,
+                "model_format": project.model_format.value,
+                "report_format": project.report_format.value,
+                "ai_provider": ai_provider.provider_name,
+                "ai_available": ai_provider.is_available(),
                 "model_info": model_info,
                 "tables": tables,
                 "columns": columns,
@@ -175,11 +194,15 @@ def upload_file():
             }
 
             # 8. Generate Excel Workbook (18 Sheets)
+            metadata["model_health"] = ModelHealthAnalyzer.calculate_health_score(metadata)
+
+            # Generate Excel Workbook (6 Sheets)
             excel_filename = f"PBIP_Analysis_{secure_filename(project.project_name)}_{timestamp}.xlsx"
             excel_path = os.path.join(app.config["OUTPUT_FOLDER"], excel_filename)
             ExcelGenerator.generate_report(metadata, excel_path)
 
             logger.info(f"Phase 1, 2 & 3 Analysis completed successfully for {project.project_name}")
+            logger.info(f"Analysis completed successfully for {project.project_name}")
 
             return render_template(
                 "result.html",

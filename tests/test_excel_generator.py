@@ -1,18 +1,15 @@
-"""Tests for ExcelGenerator (9-sheet workbook output)."""
+"""Tests for ExcelGenerator (6-sheet workbook output)."""
 
 import openpyxl
 from output.excel_generator import ExcelGenerator
 
-EXPECTED_9_SHEETS = [
-    "Executive Summary",
-    "Tables & Columns",
-    "Measures & Calculated Columns",
+EXPECTED_6_SHEETS = [
+    "Summary",
+    "Model Inventory",
+    "Report Usage",
     "Relationships & Lineage",
-    "Pages & Visuals",
-    "Data Sources & Queries",
-    "Usage & Unused Objects",
-    "DAX Recommendations",
-    "Model & Date Metadata",
+    "Data Sources",
+    "DAX Analysis",
 ]
 
 
@@ -20,6 +17,9 @@ def test_excel_generator_structure(tmp_path):
     output_file = str(tmp_path / "test_analysis.xlsx")
 
     metadata = {
+        "project_name": "TestProject",
+        "model_format": "TMDL",
+        "report_format": "PBIR",
         "model_info": {
             "Report / Project Name": "TestProject",
             "Semantic Model Name": "TestModel",
@@ -51,15 +51,17 @@ def test_excel_generator_structure(tmp_path):
         "usage_lineage": [],
         "unused_objects": [],
         "dax_improvements": [],
+        "dax_analysis": [],
+        "model_health": {"score": 95, "grade": "A", "status_text": "Good", "deductions": []},
     }
 
     ExcelGenerator.generate_report(metadata, output_file)
 
     wb = openpyxl.load_workbook(output_file)
 
-    assert len(wb.sheetnames) == 9
-    assert wb.sheetnames == EXPECTED_9_SHEETS
+    assert len(wb.sheetnames) == 6
+    assert wb.sheetnames == EXPECTED_6_SHEETS
 
-    # Verify Executive Summary
-    summary_ws = wb["Executive Summary"]
-    assert summary_ws["A1"].value == "Power BI Project Analysis — Executive Summary"
+    # Verify Summary worksheet
+    summary_ws = wb["Summary"]
+    assert "Power BI" in summary_ws["A1"].value

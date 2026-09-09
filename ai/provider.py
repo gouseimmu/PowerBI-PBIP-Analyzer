@@ -4,6 +4,9 @@ import os
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,16 @@ class DAXAIProvider(ABC):
         """Send sanitized DAX and model context to AI and return structured analysis dictionary."""
         pass
 
+    @abstractmethod
+    def chat_completion(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.2,
+        max_tokens: int = 1000,
+    ) -> Optional[str]:
+        """Send chat messages history to AI and return assistant text response."""
+        pass
+
 
 class NullAIProvider(DAXAIProvider):
     """Fallback provider when no AI API credentials are configured."""
@@ -42,9 +55,20 @@ class NullAIProvider(DAXAIProvider):
         logger.debug("NullAIProvider active; AI-assisted analysis skipped.")
         return None
 
+    def chat_completion(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.2,
+        max_tokens: int = 1000,
+    ) -> Optional[str]:
+        logger.debug("NullAIProvider active; chat completion skipped.")
+        return None
+
 
 def get_ai_provider() -> DAXAIProvider:
     """Factory function to instantiate configured AI provider from environment variables."""
+    load_dotenv()
+
     # Check explicitly disabled
     if os.getenv("DISABLE_AI", "").lower() in ["1", "true", "yes"]:
         logger.info("AI analysis explicitly disabled via DISABLE_AI.")
@@ -55,8 +79,8 @@ def get_ai_provider() -> DAXAIProvider:
     # 1. Check Azure OpenAI
     azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
     azure_key = os.getenv("AZURE_OPENAI_API_KEY")
-    azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
-    azure_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+    azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1-mini")
+    azure_version = os.getenv("AZURE_OPENAI_API_VERSION", "v1")
 
     if (provider_env in ["azure", "azure_openai"] or (azure_endpoint and azure_key)) and azure_endpoint and azure_key:
         from .azure_openai_provider import AzureOpenAIProvider

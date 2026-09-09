@@ -5,6 +5,8 @@ from .openai_provider import OpenAIProvider
 from .prompts import build_system_prompt, build_user_prompt
 from .response_parser import AIResponseParser
 from .dax_optimizer import DAXOptimizer
+from .context_builder import ContextBuilder
+from .powerbi_assistant import PowerBIChatbot
 
 __all__ = [
     "DAXAIProvider",
@@ -16,5 +18,7 @@ __all__ = [
     "build_user_prompt",
     "AIResponseParser",
     "DAXOptimizer",
+    "ContextBuilder",
+    "PowerBIChatbot",
 ]
 

@@ -1,4 +1,4 @@
-"""End-to-end tests for Phase 3 (9-sheet Excel generation & Flask results)."""
+"""End-to-end tests for Phase 3 (6-sheet Excel generation & Flask results)."""
 
 import openpyxl
 import pytest
@@ -6,16 +6,13 @@ from app import app
 from output.excel_generator import ExcelGenerator
 from tests.fixtures import create_mock_tmdl_pbip_zip
 
-EXPECTED_9_SHEETS = [
-    "Executive Summary",
-    "Tables & Columns",
-    "Measures & Calculated Columns",
+EXPECTED_6_SHEETS = [
+    "Summary",
+    "Model Inventory",
+    "Report Usage",
     "Relationships & Lineage",
-    "Pages & Visuals",
-    "Data Sources & Queries",
-    "Usage & Unused Objects",
-    "DAX Recommendations",
-    "Model & Date Metadata",
+    "Data Sources",
+    "DAX Analysis",
 ]
 
 
@@ -26,10 +23,13 @@ def client():
         yield client
 
 
-def test_excel_9_sheets_generation(tmp_path):
+def test_excel_6_sheets_generation(tmp_path):
     output_file = str(tmp_path / "full_phase3_analysis.xlsx")
 
     metadata = {
+        "project_name": "SalesAnalytics",
+        "model_format": "TMDL",
+        "report_format": "PBIR",
         "model_info": {
             "Report / Project Name": "SalesAnalytics",
             "Semantic Model Name": "SalesModel",
@@ -118,6 +118,7 @@ def test_excel_9_sheets_generation(tmp_path):
                 "Complexity Score": 2.5,
             }
         ],
+        "dax_complexity": [],
         "phase3_summary": {
             "DAX Objects Analyzed": 2,
             "Measures Analyzed": 2,
@@ -131,14 +132,15 @@ def test_excel_9_sheets_generation(tmp_path):
             "Static Suggestions": 1,
             "AI Failures": 0,
             "Suggestions Requiring Manual Validation": 1,
-        }
+        },
+        "model_health": {"score": 95, "grade": "A", "status_text": "Good", "deductions": []},
     }
 
     ExcelGenerator.generate_report(metadata, output_file)
 
     wb = openpyxl.load_workbook(output_file)
-    assert len(wb.sheetnames) == 9
-    assert wb.sheetnames == EXPECTED_9_SHEETS
+    assert len(wb.sheetnames) == 6
+    assert wb.sheetnames == EXPECTED_6_SHEETS
 
 
 def test_flask_upload_phase3_full_pipeline(client, tmp_path):

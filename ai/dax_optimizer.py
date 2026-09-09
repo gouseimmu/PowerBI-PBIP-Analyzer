@@ -3,6 +3,7 @@
 Combines deterministic static analysis with optional AI-assisted optimization,
 caches responses, and compiles Sheet 16 (DAX Analysis), Sheet 17 (DAX Improvements),
 and Sheet 18 (DAX Complexity) data.
+caches responses per run, enforces request limits, and compiles DAX analysis records.
 """
 
 import hashlib
@@ -19,6 +20,7 @@ from models.dax_analysis import (
 from analyzers.dax_pattern_analyzer import DAXPatternAnalyzer
 from analyzers.dax_quality_analyzer import DAXQualityAnalyzer, SEVERITY_RANKS
 from analyzers.dax_dependency_analyzer import ModelCatalog
+from analyzers.dax_dependency_analyzer import ModelCatalog, DAXDependencyAnalyzer
 from .provider import DAXAIProvider, get_ai_provider
 from .response_parser import AIResponseParser
 
@@ -45,6 +47,7 @@ class DAXOptimizer:
         self.max_ai_requests = max_ai_requests
 
         self._ai_cache: Dict[str, Any] = {}
+        self.ai_requests_sent = 0
         self.analysis_records: List[DAXAnalysisRecord] = []
         self.improvements: List[DAXImprovement] = []
         self.complexity_records: List[Dict[str, Any]] = []
@@ -66,7 +69,7 @@ class DAXOptimizer:
             tname = m.get("Table", "")
             mname = m.get("Measure Name", "")
             dax = m.get("DAX Expression", "")
-            self._analyze_single_object("Measure", tname, mname, dax, ai_requests_sent)
+            self._analyze_single_object("Measure", tname, mname, dax)
             total_analyzed += 1
 
         # 2. Process Calculated Columns
@@ -74,14 +77,14 @@ class DAXOptimizer:
             tname = cc.get("Table", "")
             cname = cc.get("Column", "")
             dax = cc.get("DAX Expression", "")
-            self._analyze_single_object("Calculated Column", tname, cname, dax, ai_requests_sent)
+            self._analyze_single_object("Calculated Column", tname, cname, dax)
             total_analyzed += 1
 
         logger.info(
-            f"DAX Optimization complete: {total_analyzed} objects analyzed, {len(self.improvements)} improvement suggestions generated."
+            f"DAX Optimization complete: {total_analyzed} objects analyzed, {self.ai_requests_sent} AI requests sent, {len(self.improvements)} suggestions generated."
         )
 
-    def _analyze_single_object(self, obj_type: str, table: str, name: str, dax: str, ai_requests_sent: int) -> None:
+    def _analyze_single_object(self, obj_type: str, table: str, name: str, dax: str) -> None:
         """Analyze one DAX formula through static checks and optional AI."""
         if not dax or dax == "Unknown":
             return
@@ -96,31 +99,37 @@ class DAXOptimizer:
         ai_issue: Optional[DAXQualityIssue] = None
         analysis_status = "Static Complete"
 
-        if self.ai_provider.is_available() and ai_requests_sent < self.max_ai_requests:
-            cache_key = hashlib.sha256(f"{obj_type}:{table}:{name}:{dax}".encode()).hexdigest()
+        if self.ai_provider.is_available():
+            # Build relevant dependency context instead of full model catalog
+            relevant_deps = self._get_relevant_dependencies(dax, table)
+            context_str = f"{obj_type}:{table}:{name}:{dax}:" + ",".join(sorted(relevant_deps))
+            cache_key = hashlib.sha256(context_str.encode()).hexdigest()
+
             raw_ai_res = None
 
             if cache_key in self._ai_cache:
                 raw_ai_res = self._ai_cache[cache_key]
                 logger.debug(f"Using cached AI response for {name}")
-            else:
+            elif self.ai_requests_sent < self.max_ai_requests:
                 context = {
                     "object_name": f"[{name}]" if obj_type == "Measure" else f"{table}[{name}]",
                     "object_type": obj_type,
                     "table": table,
                     "original_dax": dax,
-                    "known_columns": [c for (t, c) in self.catalog.columns if t == table],
-                    "dependencies": [f"[{m}]" for (t, m) in self.catalog.measures],
+                    "dependencies": relevant_deps,
                     "static_issues": [{"issue": i.issue, "severity": i.severity, "explanation": i.explanation} for i in static_issues],
                     "usage_summary": self._get_usage_summary(obj_type, table, name),
                 }
                 try:
+                    self.ai_requests_sent += 1
                     raw_ai_res = self.ai_provider.analyze_dax(context)
                     if raw_ai_res:
                         self._ai_cache[cache_key] = raw_ai_res
                 except Exception as e:
                     logger.warning(f"AI provider failed for {name}: {e}")
                     self.ai_failures_count += 1
+            else:
+                logger.info(f"Max AI requests ({self.max_ai_requests}) reached. Skipping AI call for {name}.")
 
             if raw_ai_res:
                 ai_issue = AIResponseParser.parse_and_validate(raw_ai_res, self.catalog, table)
@@ -147,6 +156,7 @@ class DAXOptimizer:
         indirect_count_val = usage_info.get("Indirect Usage Count", 0)
 
         # 6. Build Sheet 16 Analysis Record
+        # 6. Build Analysis Record
         self.analysis_records.append(DAXAnalysisRecord(
             object_type=obj_type,
             table=table,
@@ -171,6 +181,7 @@ class DAXOptimizer:
         ))
 
         # 7. Build Sheet 17 Improvements Records
+        # 7. Build Improvements Records
         for issue in all_issues:
             if issue.source == "Static Rule":
                 self.static_suggestions_count += 1
@@ -195,6 +206,7 @@ class DAXOptimizer:
             ))
 
         # 8. Build Sheet 18 Complexity Record
+        # 8. Build Complexity Record
         self.complexity_records.append({
             "Object Type": obj_type,
             "Table": table,
@@ -213,6 +225,21 @@ class DAXOptimizer:
             "Complexity Score": complexity.complexity_score,
         })
 
+    def _get_relevant_dependencies(self, dax: str, context_table: str) -> List[str]:
+        """Extract only direct model references from DAX to keep prompt context minimal."""
+        deps = set()
+        refs = DAXDependencyAnalyzer.extract_dax_references(dax)
+        for ref in refs:
+            if ref.ref_type == "qualified_column":
+                res = self.catalog.resolve_qualified_column(ref.table_name or "", ref.object_name)
+                if res:
+                    deps.add(f"'{res[0]}'[{res[1]}]")
+            elif ref.ref_type == "unqualified_bracket":
+                res = self.catalog.resolve_unqualified(ref.object_name, context_table)
+                if res:
+                    deps.add(f"[{res[1]}]" if res[2] == "Measure" else f"'{res[0]}'[{res[1]}]")
+        return list(deps)
+
     def _get_usage_summary(self, obj_type: str, table: str, name: str) -> str:
         """Format usage context string for prompts."""
         usage_info = self.object_usage_map.get(name, {})
@@ -222,6 +249,7 @@ class DAXOptimizer:
 
     def get_analysis_sheet_data(self) -> List[Dict[str, Any]]:
         """Return data for Sheet 16: DAX Analysis."""
+        """Return data for DAX Analysis sheet."""
         return [
             {
                 "Object Type": r.object_type,
@@ -250,6 +278,7 @@ class DAXOptimizer:
 
     def get_improvements_sheet_data(self) -> List[Dict[str, Any]]:
         """Return data for Sheet 17: DAX Improvements."""
+        """Return data for DAX Improvements."""
         return [
             {
                 "Object Type": imp.object_type,
@@ -272,10 +301,12 @@ class DAXOptimizer:
 
     def get_complexity_sheet_data(self) -> List[Dict[str, Any]]:
         """Return data for Sheet 18: DAX Complexity."""
+        """Return data for DAX Complexity."""
         return self.complexity_records
 
     def get_phase3_summary_metrics(self) -> Dict[str, Any]:
         """Compute Phase 3 metrics for the Executive Summary sheet."""
+        """Compute summary metrics."""
         total_analyzed = len(self.analysis_records)
         measures_analyzed = sum(1 for r in self.analysis_records if r.object_type == "Measure")
         calc_cols_analyzed = sum(1 for r in self.analysis_records if r.object_type == "Calculated Column")
@@ -298,6 +329,7 @@ class DAXOptimizer:
             "AI Suggestions": self.ai_suggestions_count,
             "Static Suggestions": self.static_suggestions_count,
             "AI Failures": self.ai_failures_count,
+            "AI Requests Sent": self.ai_requests_sent,
             "Suggestions Requiring Manual Validation": self.manual_validation_count,
         }
 

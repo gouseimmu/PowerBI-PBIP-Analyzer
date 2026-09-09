@@ -2,6 +2,7 @@
 
 Performs recursive dependency traversal from direct visual references to classify
 every model object into Direct, Indirect, or Unused, and builds complete usage lineage paths.
+every model object into Direct, Indirect, Direct + Indirect, or Unused, and builds complete usage lineage paths.
 """
 
 import logging
@@ -157,10 +158,12 @@ class ObjectUsageAnalyzer:
         unused_objects = 0
         directly_used_objects = 0
         indirectly_used_objects = 0
+        direct_and_indirect_used_objects = 0
 
         # Helper to process an object
         def process_entity(obj_type: str, table_name: str, obj_name: str):
             nonlocal total_objects, used_objects, unused_objects, directly_used_objects, indirectly_used_objects
+            nonlocal total_objects, used_objects, unused_objects, directly_used_objects, indirectly_used_objects, direct_and_indirect_used_objects
 
             total_objects += 1
             can_id = f"{obj_type.upper()}:{table_name}" + (f"[{obj_name}]" if obj_name else "")
@@ -176,7 +179,14 @@ class ObjectUsageAnalyzer:
             indirect_vis_locs = {(u.page_name, u.visual_id) for (u, _, _, _) in indirect_records}
             total_loc_count = len(direct_vis_locs.union(indirect_vis_locs))
 
-            if direct_count > 0:
+            if direct_count > 0 and indirect_count > 0:
+                used = "Yes"
+                usage_type = "Direct + Indirect"
+                used_objects += 1
+                directly_used_objects += 1
+                indirectly_used_objects += 1
+                direct_and_indirect_used_objects += 1
+            elif direct_count > 0:
                 used = "Yes"
                 usage_type = "Direct"
                 used_objects += 1
@@ -235,6 +245,7 @@ class ObjectUsageAnalyzer:
             "Unused Objects": unused_objects,
             "Directly Used Objects": directly_used_objects,
             "Indirectly Used Objects": indirectly_used_objects,
+            "Direct + Indirect Objects": direct_and_indirect_used_objects,
             "Direct Usage Records": len(self.visual_usage_list),
             "Indirect Usage Records": len(self.lineage_list),
             "Dependency Edges": len(self.dax_dependencies_list),
@@ -246,23 +257,29 @@ class ObjectUsageAnalyzer:
 
         logger.info(
             f"Phase 2 Analysis complete: {total_objects} total objects, {used_objects} used ({directly_used_objects} direct, {indirectly_used_objects} indirect), "
+            f"Phase 2 Analysis complete: {total_objects} total objects, {used_objects} used "
+            f"({directly_used_objects} direct, {indirectly_used_objects} indirect, {direct_and_indirect_used_objects} direct+indirect), "
             f"{unused_objects} unused, {len(self.lineage_list)} lineage records."
         )
 
     def get_object_usage(self) -> List[Dict[str, Any]]:
         """Return data for Sheet 11: Object Usage."""
+        """Return data for Object Usage."""
         return self.object_usage_list
 
     def get_visual_usage(self) -> List[Dict[str, Any]]:
         """Return data for Sheet 12: Visual Usage."""
+        """Return data for Visual Usage."""
         return self.visual_usage_list
 
     def get_dax_dependencies(self) -> List[Dict[str, Any]]:
         """Return data for Sheet 13: DAX Dependencies."""
+        """Return data for DAX Dependencies."""
         return self.dax_dependencies_list
 
     def get_usage_lineage(self) -> List[Dict[str, Any]]:
         """Return data for Sheet 14: Usage Lineage."""
+        """Return data for Usage Lineage."""
         return [
             {
                 "Page Name": rec.page_name,
@@ -279,6 +296,7 @@ class ObjectUsageAnalyzer:
 
     def get_unused_objects(self) -> List[Dict[str, Any]]:
         """Return data for Sheet 15: Unused Objects."""
+        """Return data for Unused Objects."""
         return self.unused_objects_list
 
     def get_summary_metrics(self) -> Dict[str, Any]:
