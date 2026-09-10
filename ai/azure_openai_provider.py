@@ -82,6 +82,7 @@ class AzureOpenAIProvider(DAXAIProvider):
         }
 
         try:
+            logger.info(f"Sending DAX analysis request to Azure OpenAI for '{context.get('object_name')}'")
             obj_name = context.get("object_name", "object")
             logger.info(f"Sending DAX analysis request to Azure OpenAI for '{obj_name}'")
             response = requests.post(url, headers=headers, json=payload, timeout=self.timeout)
@@ -90,6 +91,7 @@ class AzureOpenAIProvider(DAXAIProvider):
             res_json = response.json()
             choices = res_json.get("choices", [])
             if not choices:
+                logger.warning("Azure OpenAI returned empty choices.")
                 logger.warning("Azure OpenAI returned empty choices array.")
                 return None
 
@@ -100,12 +102,16 @@ class AzureOpenAIProvider(DAXAIProvider):
             return json.loads(content)
 
         except requests.exceptions.RequestException as e:
+            logger.warning(f"Azure OpenAI API request failed: {e}")
+            # Sanitize exception message to avoid logging API keys
             err_type = type(e).__name__
             logger.warning(f"Azure OpenAI API request failed ({err_type}). AI optimization unavailable.")
             return None
         except (json.JSONDecodeError, KeyError) as e:
+            logger.warning(f"Failed to parse Azure OpenAI JSON response: {e}")
             logger.warning("Failed to parse Azure OpenAI JSON response. Static DAX analysis was completed.")
             return None
+
         except Exception as e:
             logger.warning("Unexpected error during Azure OpenAI execution. Fallback to static analysis.")
             return None

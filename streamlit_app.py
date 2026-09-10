@@ -122,6 +122,7 @@ if metadata:
     st.markdown("---")
 
     # Interactive Dashboard Tabs
+    t1, t2, t3, t4, t5, t6, t7 = st.tabs([
     t1, t2, t3, t4, t5, t6, t7, t8 = st.tabs([
         "🏥 Model Health",
         "📦 Model Inventory",
@@ -129,6 +130,7 @@ if metadata:
         "🔗 Lineage & Relationships",
         "🔌 Data Sources",
         "⚡ DAX Analysis",
+        "🤖 AI Governance & Advisory"
         "🛡️ AI Governance Advisory",
         "🤖 AI Assistant",
     ])

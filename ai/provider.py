@@ -79,6 +79,8 @@ def get_ai_provider() -> DAXAIProvider:
     # 1. Check Azure OpenAI
     azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
     azure_key = os.getenv("AZURE_OPENAI_API_KEY")
+    azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
+    azure_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
     azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1-mini")
     azure_version = os.getenv("AZURE_OPENAI_API_VERSION", "v1")
 

@@ -42,6 +42,7 @@ The platform features an integrated **Power BI AI Assistant** that answers techn
 
 ```bash
 python -m venv .venv
+.venv\\Scripts\\activate        # Windows
 .venv\Scripts\activate        # Windows
 source .venv/bin/activate         # macOS/Linux
 pip install -r requirements.txt
@@ -50,6 +51,8 @@ streamlit run streamlit_app.py
 
 ## AI configuration
 
+AI is optional. Without credentials, static DAX analysis continues to work.
+See `.env.example` for supported environment variables.
 AI is optional. Without credentials, static DAX analysis and deterministic model health evaluation continue to work seamlessly.
 See `.env.example` for supported environment variables (e.g. `AI_PROVIDER=azure_openai`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT=gpt-4.1-mini`).
 
@@ -57,6 +60,8 @@ See `.env.example` for supported environment variables (e.g. `AI_PROVIDER=azure_
 
 Upload a ZIP containing the complete PBIP project folder. The ZIP should preserve the PBIP project file, `.Report` folder and `.SemanticModel` folder.
 
+## Security
 ## Security & Privacy
 
+Uploaded projects are processed in temporary storage and are not committed to the repository. API keys should be supplied through environment variables or Streamlit secrets, never hard-coded.
 Uploaded projects are processed in temporary storage and are not committed to the repository. API keys are loaded via environment variables and are never hard-coded, logged, or exposed in the Streamlit UI or Excel files. Power Query connection strings and secrets are sanitized before sending context to Azure OpenAI.
