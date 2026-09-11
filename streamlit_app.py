@@ -122,18 +122,17 @@ if metadata:
     st.markdown("---")
 
     # Interactive Dashboard Tabs
-    t1, t2, t3, t4, t5, t6, t7 = st.tabs([
-    t1, t2, t3, t4, t5, t6, t7, t8 = st.tabs([
-        "🏥 Model Health",
-        "📦 Model Inventory",
-        "🖥️ Report Usage",
-        "🔗 Lineage & Relationships",
-        "🔌 Data Sources",
-        "⚡ DAX Analysis",
-        "🤖 AI Governance & Advisory"
-        "🛡️ AI Governance Advisory",
-        "🤖 AI Assistant",
-    ])
+    # Interactive Dashboard Tabs
+t1, t2, t3, t4, t5, t6, t7, t8 = st.tabs([
+    "🏥 Model Health",
+    "📦 Model Inventory",
+    "🖥️ Report Usage",
+    "🔗 Lineage & Relationships",
+    "🔌 Data Sources",
+    "⚡ DAX Analysis",
+    "🛡️ AI Governance Advisory",
+    "🤖 AI Assistant",
+])
 
     with t1:
         st.markdown("### PBIP Analyzer Model Health Score Breakdown")
